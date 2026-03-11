@@ -1,1 +1,49 @@
+#include <ELECHOUSE_CC1101_SRC_DRV.h>
+#include <RF24.h>
+// Configuración de frecuencias Flipper Zero
+float frecuencias[] = {433.92, 315.00, 868.30, 434.10};
+int numFrecuencias = 4;
+const int UMBRAL_RSSI = -65;
+// Configuración NRF24L01 (Pines: CE=17, CSN=4)
+RF24 radio(17, 4);
+void setup() {
+  Serial.begin(115200);
+  // Iniciar CC1101 en el bus SPI (CSN en GPIO 5)
+  ELECHOUSE_cc1101.setSpiPin(18, 19, 23, 5);
+  ELECHOUSE_cc1101.Init();
+  ELECHOUSE_cc1101.setModulation(2); // Modo ASK/OOK (el que usa Flipper)
+  // Iniciar NRF24L01
+  radio.begin();
+  radio.setPALevel(RF24_PA_MAX);
+  Serial.println("--- Sistema Vigilante Iniciado ---");
+}
+void loop() {
+  for (int i = 0; i < numFrecuencias; i++) {
+    // 1. ESCANEO SUB-GHZ
+    ELECHOUSE_cc1101.setMHZ(frecuencias[i]);
+    ELECHOUSE_cc1101.SetRx();
+    delay(30); // Tiempo para estabilizar lectura
+    int rssi = ELECHOUSE_cc1101.getRssi();
+    // 2. DETECCIÓN Y TRANSMISIÓN
+    if (rssi > UMBRAL_RSSI) {
+      Serial.print("¡ALERTA! Flipper detectado en: "); Serial.println(frecuencias[i]);
+      // Bloqueo temporal (3 segundos)
+      unsigned long meta = millis() + 3000;
+      while(millis() < meta) {
+       // Neutraliza Sub-GHz con “basura”
+       byte basura[] = {0xAA, 0xFF, 0xAA, 0xFF};
+       ELECHOUSE_cc1101.setMHZ(frecuencias[i]);
+       ELECHOUSE_cc1101.SendData(basura, 4);
+     	
+        // Neutraliza 2.4GHz simultáneamente (barrido rápido)
+        for(int ch=60; ch<80; ch+=2) { 
+          radio.setChannel(ch);
+          const char txt[] = "STOP";
+          radio.write(&txt, sizeof(txt));
+        }
+      }
+      Serial.println("Fin de neutralización. Volviendo a escaneo...");
+    }
+  }
+}
 

@@ -1,1 +1,52 @@
-
+#include <ELECHOUSE_CC1101_SRC_DRV.h>
+// Frecuencias objetivo del Flipper Zero
+float frecuencias[] = {433.92, 315.00, 868.30, 434.10};
+int numFrecuencias = 4;
+const int UMBRAL_RSSI = -65; // Umbral de alarma
+const int LED_PIN = 2;       // LED interno de la mayoría de los ESP32
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  
+  // Inicialización del módulo
+  ELECHOUSE_cc1101.setSpiPin(18, 19, 23, 5); // SCK, MISO, MOSI, CSN
+  if (ELECHOUSE_cc1101.getCC1101()) {
+    ELECHOUSE_cc1101.Init();
+    Serial.println(">>> MONITOR DE SEGURIDAD ACTIVO <<<");
+  } else {
+    Serial.println("Error: No se detecta el CC1101. Revisa conexiones.");
+    while(1); // Detener si hay error
+  }
+}
+void loop() {
+  bool alertaGlobal = false;
+  for (int i = 0; i < numFrecuencias; i++) {
+    ELECHOUSE_cc1101.setMHZ(frecuencias[i]);
+    ELECHOUSE_cc1101.SetRx(); 
+    delay(40); // Tiempo para capturar energía en el aire
+    int rssi = ELECHOUSE_cc1101.getRssi();
+    // Mostrar escaneo en tiempo real (opcional)
+    Serial.print("Freq: "); Serial.print(frecuencias[i]);
+    Serial.print(" | RSSI: "); Serial.println(rssi);
+    if (rssi > UMBRAL_RSSI) {
+      Serial.println("***********************************");
+      Serial.print("!!! ALERTA: Actividad detectada en ");
+      Serial.print(frecuencias[i]); Serial.println(" MHz");
+      Serial.println("***********************************");
+      dispararAlarma();
+      alertaGlobal = true;
+    }
+  }
+  // Si no hay alerta, asegurar que el LED esté apagado
+  if (!alertaGlobal) digitalWrite(LED_PIN, LOW);
+  delay(10); // Respiro para el procesador
+}
+void dispararAlarma() {
+  // Patrón de parpadeo rápido
+  for(int j=0; j<5; j++) {
+    digitalWrite(LED_PIN, HIGH);
+    delay(50);
+    digitalWrite(LED_PIN, LOW);
+    delay(50);
+  }
+}
